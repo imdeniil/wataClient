@@ -5,6 +5,7 @@
 """
 
 from .client import WataClient
+from .manager import WataClientManager
 from .exceptions import (
     ApiAuthError,
     ApiConnectionError,
@@ -20,6 +21,7 @@ from .exceptions import (
 
 __all__ = [
     "WataClient",
+    "WataClientManager",
     "ApiError",
     "ApiConnectionError",
     "ApiTimeoutError",

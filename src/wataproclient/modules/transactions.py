@@ -1,40 +1,75 @@
 """
-Модуль для работы с транзакциями.
+Модуль для работы с транзакциями WATA API.
+
+Предоставляет интерфейс для получения информации о транзакциях и их поиска.
 """
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, Any, Optional, List, Union
 from uuid import UUID
 
 from .base import BaseApiModule
 
+
 class TransactionsModule(BaseApiModule):
-    """Модуль для работы с транзакциями."""
+    """
+    Модуль для работы с транзакциями WATA API.
+    
+    Позволяет получать информацию о транзакциях и осуществлять их поиск
+    с применением различных фильтров.
+    """
+
+    def __init__(self, http_client):
+        """
+        Инициализация модуля транзакций.
+
+        Аргументы:
+            http_client: Экземпляр HTTP-клиента
+        """
+        super().__init__(http_client)
+        self.logger.debug("TransactionsModule инициализирован.")
+        self.base_endpoint = "/api/h2h/transactions"
 
     async def get(self, transaction_id: Union[str, UUID]) -> Dict[str, Any]:
         """
-        Получение деталей транзакции по ID.
+        Получение информации о транзакции по её UUID.
 
         Аргументы:
-            transaction_id: UUID транзакции
+            transaction_id: UUID идентификатор транзакции
 
         Возвращает:
-            Детали транзакции
-
-        Пример:
-            ```python
-            transaction = await client.transactions.get("550e8400-e29b-41d4-a716-446655440000")
-            print(f"Статус транзакции: {transaction['status']}")
-            ```
+            Словарь с информацией о транзакции, включая:
+            - id: UUID идентификатор транзакции в системе WATA
+            - terminalName: Название магазина мерчанта
+            - terminalPublicId: Публичный идентификатор магазина мерчанта
+            - type: Тип транзакции (CardCrypto, SBP)
+            - amount: Сумма платежа
+            - currency: Валюта платежа (RUB, EUR, USD)
+            - status: Статус транзакции (Pending, Paid, Declined)
+            - errorCode: Код ошибки в случае неуспешного запроса
+            - errorDescription: Описание ошибки в случае неуспешного запроса
+            - orderId: Идентификатор заказа в системе мерчанта
+            - orderDescription: Описание заказа
+            - creationTime: Дата и время создания транзакции в UTC
+            - paymentTime: Дата и время оплаты транзакции в UTC
+            - totalCommission: Комиссия за транзакцию
+            - sbpLink: Ссылка на QR-код (если тип транзакции SBP)
+            - paymentLinkId: Идентификатор платежной ссылки (если транзакция создана через ссылку)
         """
-        transaction_id_str = str(transaction_id)
-        self.logger.info(f"Получение транзакции {transaction_id_str}")
-        return await self.http.get(f"/transactions/{transaction_id_str}")
-
+        self.logger.info(f"Получение информации о транзакции с ID {transaction_id}")
+        
+        # Преобразуем UUID в строку, если это необходимо
+        if isinstance(transaction_id, UUID):
+            transaction_id = str(transaction_id)
+        
+        # Выполнение запроса
+        endpoint = f"{self.base_endpoint}/{transaction_id}"
+        return await self.http.get(endpoint)
+    
     async def search(
         self,
         order_id: Optional[str] = None,
-        creation_time_from: Optional[Union[str, datetime]] = None,
-        creation_time_to: Optional[Union[str, datetime]] = None,
+        creation_time_from: Optional[Union[datetime, str]] = None,
+        creation_time_to: Optional[Union[datetime, str]] = None,
         amount_from: Optional[float] = None,
         amount_to: Optional[float] = None,
         currencies: Optional[List[str]] = None,
@@ -44,50 +79,51 @@ class TransactionsModule(BaseApiModule):
         max_result_count: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Поиск транзакций по различным параметрам.
+        Поиск транзакций с фильтрацией.
 
         Аргументы:
-            order_id: Идентификатор заказа в системе продавца
-            creation_time_from: Нижняя граница даты создания
-            creation_time_to: Верхняя граница даты создания
-            amount_from: Минимальная сумма транзакции
-            amount_to: Максимальная сумма транзакции
-            currencies: Список валют для фильтрации
-            statuses: Список статусов для фильтрации (Pending, Paid, Declined)
-            sorting: Поле для сортировки (amount, creationTime)
-                     Добавьте суффикс "desc" для сортировки по убыванию
-            skip_count: Количество записей для пропуска
-            max_result_count: Максимальное количество возвращаемых записей
+            order_id: Идентификатор заказа в системе мерчанта
+            creation_time_from: Начальная дата создания
+            creation_time_to: Конечная дата создания
+            amount_from: Минимальная сумма платежа
+            amount_to: Максимальная сумма платежа
+            currencies: Список валют (RUB, EUR, USD)
+            statuses: Список статусов транзакций (Pending, Paid, Declined)
+            sorting: Поле для сортировки (orderId, creationTime, amount)
+                     Можно добавить суффикс 'desc' для сортировки по убыванию
+            skip_count: Количество записей, которые нужно пропустить (по умолчанию 0)
+            max_result_count: Максимальное количество записей (по умолчанию 10, максимум 1000)
 
         Возвращает:
-            Словарь, содержащий items (список транзакций) и totalCount
-
-        Пример:
-            ```python
-            result = await client.transactions.search(
-                amount_from=10.0,
-                amount_to=100.0,
-                currencies=["RUB"],
-                statuses=["Paid"],
-                sorting="creationTime desc",
-                max_result_count=20
-            )
-            transactions = result["items"]
-            total = result["totalCount"]
-            ```
+            Словарь с результатами поиска:
+            - items: Список транзакций
+            - totalCount: Общее количество найденных записей
         """
-        params = self._prepare_params(
-            orderId=order_id,
-            creationTimeFrom=self._format_date_param(creation_time_from),
-            creationTimeTo=self._format_date_param(creation_time_to),
-            amountFrom=amount_from,
-            amountTo=amount_to,
-            currencies=self._format_array_param(currencies),
-            statuses=self._format_array_param(statuses),
-            sorting=sorting,
-            skipCount=skip_count,
-            maxResultCount=max_result_count,
-        )
-
         self.logger.info("Поиск транзакций")
-        return await self.http.get("/transactions", params=params)
+        
+        # Подготовка параметров запроса
+        params = {}
+        
+        if order_id:
+            params["orderId"] = order_id
+        if creation_time_from is not None:
+            params["creationTimeFrom"] = self._format_date_param(creation_time_from)
+        if creation_time_to is not None:
+            params["creationTimeTo"] = self._format_date_param(creation_time_to)
+        if amount_from is not None:
+            params["amountFrom"] = float(amount_from)
+        if amount_to is not None:
+            params["amountTo"] = float(amount_to)
+        if currencies:
+            params["currencies"] = self._format_array_param(currencies)
+        if statuses:
+            params["statuses"] = self._format_array_param(statuses)
+        if sorting:
+            params["sorting"] = sorting
+        if skip_count is not None:
+            params["skipCount"] = skip_count
+        if max_result_count is not None:
+            params["maxResultCount"] = max_result_count
+        
+        # Выполнение запроса
+        return await self.http.get(self.base_endpoint, params=params)

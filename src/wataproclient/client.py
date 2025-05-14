@@ -5,7 +5,7 @@ import logging
 from typing import Optional
 
 from .http import AsyncHttpClient
-from .modules import LinksModule, PaymentsModule, TransactionsModule, WebhooksModule
+from .modules import LinksModule, TransactionsModule, WebhooksModule
 
 class WataClient:
     """Клиент для платежного API WATA."""
@@ -52,7 +52,6 @@ class WataClient:
         
         # Инициализация модулей API
         self.links = LinksModule(self.http)
-        self.payments = PaymentsModule(self.http)
         self.transactions = TransactionsModule(self.http)
         self.webhooks = WebhooksModule(self.http)
 

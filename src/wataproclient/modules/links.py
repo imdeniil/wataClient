@@ -1,110 +1,139 @@
 """
-Модуль для работы с платежными ссылками.
+Модуль для работы с платежными ссылками WATA API.
+
+Предоставляет интерфейс для создания, получения и поиска платежных ссылок.
 """
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, Any, Optional, List, Union
 from uuid import UUID
 
 from .base import BaseApiModule
 
 
 class LinksModule(BaseApiModule):
-    """Модуль для работы с платежными ссылками."""
+    """
+    Модуль для работы с платежными ссылками WATA API.
+    
+    Позволяет создавать, получать и искать платежные ссылки.
+    Платежные ссылки используются для сценария, когда платежная форма 
+    находится на стороне WATA. Ссылка одноразовая и становится недействительной 
+    после первой успешной оплаты.
+    """
+
+    def __init__(self, http_client):
+        """
+        Инициализация модуля платежных ссылок.
+
+        Аргументы:
+            http_client: Экземпляр HTTP-клиента
+        """
+        super().__init__(http_client)
+        self.logger.debug("LinksModule инициализирован.")
+        self.base_endpoint = "/api/h2h/links"
 
     async def create(
         self,
         amount: float,
         currency: str,
-        order_id: str,
         description: Optional[str] = None,
-        success_url: Optional[str] = None,
-        fail_url: Optional[str] = None,
-        notification_url: Optional[str] = None,
-        lifetime_seconds: Optional[int] = None,
-        metadata: Optional[Dict[str, str]] = None,
-        payer_account: Optional[str] = None,
+        order_id: Optional[str] = None,
+        success_redirect_url: Optional[str] = None,
+        fail_redirect_url: Optional[str] = None,
+        expiration_date_time: Optional[Union[datetime, str]] = None,
     ) -> Dict[str, Any]:
         """
-        Создание новой платежной ссылки.
+        Создание платежной ссылки.
+
+        Платежная ссылка одноразовая и становится недействительной 
+        после первой успешной оплаты.
 
         Аргументы:
-            amount: Сумма платежа (может иметь до 2 десятичных знаков)
+            amount: Сумма платежа (например, 1188.00)
             currency: Валюта платежа (RUB, EUR, USD)
-            order_id: Идентификатор заказа в системе продавца
-            description: Описание платежа
-            success_url: URL для перенаправления после успешного платежа
-            fail_url: URL для перенаправления после неудачного платежа
-            notification_url: URL веб-хука для уведомлений о платеже
-            lifetime_seconds: Время жизни ссылки в секундах
-            metadata: Дополнительные данные для включения в уведомления
-            payer_account: Идентификатор аккаунта плательщика
+            description: Описание заказа
+            order_id: Идентификатор заказа в системе мерчанта
+            success_redirect_url: URL для перенаправления при успешной оплате
+            fail_redirect_url: URL для перенаправления при ошибке оплаты
+            expiration_date_time: Время жизни платежной ссылки (по умолчанию 3 дня, максимум 30 дней)
 
         Возвращает:
-            Детали платежной ссылки, включая URL
-
-        Пример:
-            ```python
-            link = await client.links.create(
-                amount=100.50,
-                currency="RUB",
-                order_id="ORDER-123",
-                description="Премиум-подписка",
-                success_url="https://example.com/success",
-                fail_url="https://example.com/fail"
-            )
-            payment_url = link["url"]
-            ```
+            Словарь с информацией о созданной платежной ссылке, включая:
+            - id: UUID идентификатор заказа в системе WATA
+            - amount: Сумма платежа
+            - currency: Валюта платежа
+            - status: Статус платежной ссылки (Opened, Closed)
+            - url: Адрес платежной ссылки
+            - terminalName: Название магазина мерчанта
+            - terminalPublicId: Идентификатор магазина мерчанта
+            - creationTime: Дата и время создания ссылки
+            - orderId: Идентификатор заказа в системе мерчанта
+            - description: Описание заказа
+            - successRedirectUrl: URL для перенаправления при успешной оплате
+            - failRedirectUrl: URL для перенаправления при ошибке оплаты
+            - expirationDateTime: Время жизни платежной ссылки
         """
+        self.logger.info(f"Создание платежной ссылки на сумму {amount} {currency}")
+        
+        # Подготовка данных запроса
         data = {
-            "amount": amount,
+            "amount": float(amount),
             "currency": currency,
-            "orderId": order_id,
         }
-
-        if description is not None:
+        
+        # Добавление опциональных параметров
+        if description:
             data["description"] = description
-        if success_url is not None:
-            data["successUrl"] = success_url
-        if fail_url is not None:
-            data["failUrl"] = fail_url
-        if notification_url is not None:
-            data["notificationUrl"] = notification_url
-        if lifetime_seconds is not None:
-            data["lifetimeSeconds"] = lifetime_seconds
-        if metadata is not None:
-            data["metadata"] = metadata
-        if payer_account is not None:
-            data["payerAccount"] = payer_account
-
-        self.logger.info(f"Создание платежной ссылки для заказа {order_id}")
-        return await self.http.post("/links", data=data)
-
+        if order_id:
+            data["orderId"] = order_id
+        if success_redirect_url:
+            data["successRedirectUrl"] = success_redirect_url
+        if fail_redirect_url:
+            data["failRedirectUrl"] = fail_redirect_url
+        if expiration_date_time:
+            data["expirationDateTime"] = self._format_date_param(expiration_date_time)
+        
+        # Выполнение запроса
+        return await self.http.post(self.base_endpoint, data=data)
+    
     async def get(self, link_id: Union[str, UUID]) -> Dict[str, Any]:
         """
-        Получение деталей платежной ссылки по ID.
+        Получение информации о платежной ссылке по её UUID.
 
         Аргументы:
-            link_id: UUID платежной ссылки
+            link_id: UUID идентификатор платежной ссылки
 
         Возвращает:
-            Детали платежной ссылки
-
-        Пример:
-            ```python
-            link = await client.links.get("550e8400-e29b-41d4-a716-446655440000")
-            print(f"Статус ссылки: {link['status']}")
-            ```
+            Словарь с информацией о платежной ссылке, включая:
+            - id: UUID идентификатор заказа в системе WATA
+            - amount: Сумма платежа
+            - currency: Валюта платежа
+            - status: Статус платежной ссылки (Opened, Closed)
+            - url: Адрес платежной ссылки
+            - terminalName: Название магазина мерчанта
+            - terminalPublicId: Идентификатор магазина мерчанта
+            - creationTime: Дата и время создания ссылки
+            - orderId: Идентификатор заказа в системе мерчанта
+            - description: Описание заказа
+            - successRedirectUrl: URL для перенаправления при успешной оплате
+            - failRedirectUrl: URL для перенаправления при ошибке оплаты
+            - expirationDateTime: Время жизни платежной ссылки
         """
-        link_id_str = str(link_id)
-        self.logger.info(f"Получение платежной ссылки {link_id_str}")
-        return await self.http.get(f"/links/{link_id_str}")
-
+        self.logger.info(f"Получение информации о платежной ссылке с ID {link_id}")
+        
+        # Преобразуем UUID в строку, если это необходимо
+        if isinstance(link_id, UUID):
+            link_id = str(link_id)
+        
+        # Выполнение запроса
+        endpoint = f"{self.base_endpoint}/{link_id}"
+        return await self.http.get(endpoint)
+    
     async def search(
         self,
         amount_from: Optional[float] = None,
         amount_to: Optional[float] = None,
-        creation_time_from: Optional[Union[str, datetime]] = None,
-        creation_time_to: Optional[Union[str, datetime]] = None,
+        creation_time_from: Optional[Union[datetime, str]] = None,
+        creation_time_to: Optional[Union[datetime, str]] = None,
         order_id: Optional[str] = None,
         currencies: Optional[List[str]] = None,
         statuses: Optional[List[str]] = None,
@@ -113,49 +142,51 @@ class LinksModule(BaseApiModule):
         max_result_count: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Поиск платежных ссылок по различным параметрам.
+        Поиск платежных ссылок с фильтрацией.
 
         Аргументы:
             amount_from: Минимальная сумма платежа
             amount_to: Максимальная сумма платежа
-            creation_time_from: Нижняя граница даты создания
-            creation_time_to: Верхняя граница даты создания
-            order_id: Идентификатор заказа в системе продавца
-            currencies: Список валют для фильтрации
-            statuses: Список статусов для фильтрации (Opened, Closed)
+            creation_time_from: Начальная дата создания
+            creation_time_to: Конечная дата создания
+            order_id: Идентификатор заказа в системе мерчанта
+            currencies: Список валют (RUB, EUR, USD)
+            statuses: Список статусов (Opened, Closed)
             sorting: Поле для сортировки (orderId, creationTime, amount)
-                     Добавьте суффикс "desc" для сортировки по убыванию
-            skip_count: Количество записей для пропуска
-            max_result_count: Максимальное количество возвращаемых записей
+                     Можно добавить суффикс 'desc' для сортировки по убыванию
+            skip_count: Количество записей, которые нужно пропустить (по умолчанию 0)
+            max_result_count: Максимальное количество записей (по умолчанию 10, максимум 1000)
 
         Возвращает:
-            Словарь, содержащий items (список платежных ссылок) и totalCount
-
-        Пример:
-            ```python
-            result = await client.links.search(
-                amount_from=10.0,
-                amount_to=100.0,
-                currencies=["RUB"],
-                sorting="creationTime desc",
-                max_result_count=20
-            )
-            links = result["items"]
-            total = result["totalCount"]
-            ```
+            Словарь с результатами поиска:
+            - items: Список платежных ссылок
+            - totalCount: Общее количество найденных записей
         """
-        params = self._prepare_params(
-            amountFrom=amount_from,
-            amountTo=amount_to,
-            creationTimeFrom=self._format_date_param(creation_time_from),
-            creationTimeTo=self._format_date_param(creation_time_to),
-            orderId=order_id,
-            currencies=self._format_array_param(currencies),
-            statuses=self._format_array_param(statuses),
-            sorting=sorting,
-            skipCount=skip_count,
-            maxResultCount=max_result_count,
-        )
-
         self.logger.info("Поиск платежных ссылок")
-        return await self.http.get("/links", params=params)
+        
+        # Подготовка параметров запроса
+        params = {}
+        
+        if amount_from is not None:
+            params["amountFrom"] = float(amount_from)
+        if amount_to is not None:
+            params["amountTo"] = float(amount_to)
+        if creation_time_from is not None:
+            params["creationTimeFrom"] = self._format_date_param(creation_time_from)
+        if creation_time_to is not None:
+            params["creationTimeTo"] = self._format_date_param(creation_time_to)
+        if order_id:
+            params["orderId"] = order_id
+        if currencies:
+            params["currencies"] = self._format_array_param(currencies)
+        if statuses:
+            params["statuses"] = self._format_array_param(statuses)
+        if sorting:
+            params["sorting"] = sorting
+        if skip_count is not None:
+            params["skipCount"] = skip_count
+        if max_result_count is not None:
+            params["maxResultCount"] = max_result_count
+        
+        # Выполнение запроса
+        return await self.http.get(self.base_endpoint, params=params)
