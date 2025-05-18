@@ -3,6 +3,7 @@
 
 Предоставляет интерфейс для создания, получения и поиска платежных ссылок.
 """
+import logging
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Union
 from uuid import UUID
@@ -72,6 +73,18 @@ class LinksModule(BaseApiModule):
             - failRedirectUrl: URL для перенаправления при ошибке оплаты
             - expirationDateTime: Время жизни платежной ссылки
         """
+        # Логирование вызова метода в debug режиме
+        self._debug_log_method_call(
+            "create",
+            amount=amount,
+            currency=currency,
+            description=description,
+            order_id=order_id,
+            success_redirect_url=success_redirect_url,
+            fail_redirect_url=fail_redirect_url,
+            expiration_date_time=expiration_date_time
+        )
+        
         self.logger.info(f"Создание платежной ссылки на сумму {amount} {currency}")
         
         # Подготовка данных запроса
@@ -92,8 +105,19 @@ class LinksModule(BaseApiModule):
         if expiration_date_time:
             data["expirationDateTime"] = self._format_date_param(expiration_date_time)
         
+        # Логирование подготовленных данных в debug режиме
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f"Конечная точка: {self.base_endpoint}")
+            self.logger.debug(f"Подготовленные данные для отправки: {data}")
+        
         # Выполнение запроса
-        return await self.http.post(self.base_endpoint, data=data)
+        result = await self.http.post(self.base_endpoint, data=data)
+        
+        # Логирование результата в debug режиме
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f"Результат создания платежной ссылки: {result}")
+        
+        return result
     
     async def get(self, link_id: Union[str, UUID]) -> Dict[str, Any]:
         """
@@ -118,15 +142,28 @@ class LinksModule(BaseApiModule):
             - failRedirectUrl: URL для перенаправления при ошибке оплаты
             - expirationDateTime: Время жизни платежной ссылки
         """
+        # Логирование вызова метода в debug режиме
+        self._debug_log_method_call("get", link_id=link_id)
+        
         self.logger.info(f"Получение информации о платежной ссылке с ID {link_id}")
         
         # Преобразуем UUID в строку, если это необходимо
         if isinstance(link_id, UUID):
             link_id = str(link_id)
         
-        # Выполнение запроса
+        # Логирование конечной точки в debug режиме
         endpoint = f"{self.base_endpoint}/{link_id}"
-        return await self.http.get(endpoint)
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f"Конечная точка: {endpoint}")
+        
+        # Выполнение запроса
+        result = await self.http.get(endpoint)
+        
+        # Логирование результата в debug режиме
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f"Результат получения платежной ссылки: {result}")
+        
+        return result
     
     async def search(
         self,
@@ -162,6 +199,21 @@ class LinksModule(BaseApiModule):
             - items: Список платежных ссылок
             - totalCount: Общее количество найденных записей
         """
+        # Логирование вызова метода в debug режиме
+        self._debug_log_method_call(
+            "search",
+            amount_from=amount_from,
+            amount_to=amount_to,
+            creation_time_from=creation_time_from,
+            creation_time_to=creation_time_to,
+            order_id=order_id,
+            currencies=currencies,
+            statuses=statuses,
+            sorting=sorting,
+            skip_count=skip_count,
+            max_result_count=max_result_count
+        )
+        
         self.logger.info("Поиск платежных ссылок")
         
         # Подготовка параметров запроса
@@ -188,5 +240,16 @@ class LinksModule(BaseApiModule):
         if max_result_count is not None:
             params["maxResultCount"] = max_result_count
         
+        # Логирование подготовленных параметров в debug режиме
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f"Конечная точка: {self.base_endpoint}")
+            self.logger.debug(f"Подготовленные параметры: {params}")
+        
         # Выполнение запроса
-        return await self.http.get(self.base_endpoint, params=params)
+        result = await self.http.get(self.base_endpoint, params=params)
+        
+        # Логирование результата в debug режиме
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f"Результат поиска платежных ссылок: {result}")
+        
+        return result

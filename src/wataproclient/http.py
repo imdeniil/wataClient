@@ -129,11 +129,18 @@ class AsyncHttpClient:
         session = await self._get_session()
         json_data = None if data is None else json.dumps(data)
 
-        self.logger.debug(f"Запрос: {method} {url}")
+        # Подробное логирование в debug режиме
+        self.logger.debug(f"=== ОТПРАВКА HTTP ЗАПРОСА ===")
+        self.logger.debug(f"Метод: {method}")
+        self.logger.debug(f"Полный URL: {url}")
+        self.logger.debug(f"Заголовки: {all_headers}")
         if params:
-            self.logger.debug(f"Параметры: {params}")
+            self.logger.debug(f"URL параметры: {params}")
         if data:
-            self.logger.debug(f"Данные: {data}")
+            self.logger.debug(f"Тело запроса (исходные данные): {data}")
+            self.logger.debug(f"Тело запроса (JSON): {json_data}")
+        self.logger.debug(f"Таймаут: {self.timeout}с")
+        self.logger.debug(f"=== КОНЕЦ ИНФОРМАЦИИ О ЗАПРОСЕ ===")
 
         retry_count = 0
         timeout = aiohttp.ClientTimeout(total=self.timeout)
@@ -150,8 +157,14 @@ class AsyncHttpClient:
                 ) as response:
                     response_text = await response.text()
                     
+                    # Подробное логирование ответа в debug режиме
+                    self.logger.debug(f"=== ПОЛУЧЕН HTTP ОТВЕТ ===")
                     self.logger.debug(f"Статус ответа: {response.status}")
-                    self.logger.debug(f"Тело ответа: {response_text}")
+                    self.logger.debug(f"Заголовки ответа: {dict(response.headers)}")
+                    self.logger.debug(f"Тело ответа (сырое): {response_text}")
+                    if response_data:
+                        self.logger.debug(f"Тело ответа (распарсенное): {response_data}")
+                    self.logger.debug(f"=== КОНЕЦ ИНФОРМАЦИИ ОБ ОТВЕТЕ ===")
 
                     # Попытка разобрать ответ как JSON
                     response_data = {}

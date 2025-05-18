@@ -20,6 +20,21 @@ class BaseApiModule(ABC):
         """
         self.http = http_client
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        
+    def _debug_log_method_call(self, method_name: str, **kwargs):
+        """
+        Логирование вызова метода API в debug режиме.
+        
+        Аргументы:
+            method_name: Название метода
+            **kwargs: Параметры метода
+        """
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(f"*** ВЫЗОВ МЕТОДА {self.__class__.__name__}.{method_name} ***")
+            for key, value in kwargs.items():
+                if value is not None:
+                    self.logger.debug(f"  {key}: {value}")
+            self.logger.debug(f"*** КОНЕЦ ПАРАМЕТРОВ МЕТОДА ***")
     
     def _prepare_params(self, **kwargs) -> Dict[str, Any]:
         """
